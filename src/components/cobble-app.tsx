@@ -241,7 +241,7 @@ export function CobbleApp() {
             <p className="text-xs font-medium tracking-[0.22em] text-bark uppercase">Block world</p>
             <h1 className="font-display mt-1 text-5xl leading-none font-medium text-ink">Cobble</h1>
             <p className="mt-3 max-w-sm text-sm leading-relaxed text-soil">
-              Mine the hills, stack a shelter, and wander until the light goes. Your changes stay on this device.
+              Mine the hills, stack a shelter, and wander until the light goes. Hares, boars, and finches share the grass — your changes stay on this device.
             </p>
             <div className="mt-5 flex flex-wrap gap-2">
               <button type="button" className="btn btn-gold" onClick={startNew} disabled={!ready}>

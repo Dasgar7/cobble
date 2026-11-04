@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { Animals } from "./animals";
 import { AIR, BEDROCK, BLOCKS, CHUNK, HOTBAR, WATER } from "./blocks";
 import { GameAudio } from "./audio";
 import { geometryFrom, meshChunk } from "./mesher";
@@ -85,6 +86,7 @@ export class Engine {
   private stars: THREE.Points;
   private parts: Part[];
   private pmesh: THREE.InstancedMesh;
+  private animals: Animals;
   private dummy = new THREE.Object3D();
   private color = new THREE.Color();
   private sky = new THREE.Color();
@@ -247,7 +249,9 @@ export class Engine {
     this.scene.add(this.pmesh);
     this.hideParticles();
 
+    this.animals = new Animals(this.scene);
     this.world = new World(MENU_SEED);
+    this.animals.welcome(this.world);
     this.bootstrap(0, 0);
     this.pos.y = this.world.surfaceY(0, 0);
 
@@ -353,6 +357,7 @@ export class Engine {
       },
       mine: () => this.mine(),
       place: () => this.place(),
+      animals: () => this.animals.snapshot(),
     };
     window.__cobbleReady = true;
     this.pushHud();
@@ -432,6 +437,7 @@ export class Engine {
     this.clearMeshes();
     this.world = new World(seed);
     if (save) this.world.loadEdits(save.edits);
+    this.animals.welcome(this.world);
     const px = save ? Math.floor(save.player.x) : 0;
     const pz = save ? Math.floor(save.player.z) : 0;
     this.bootstrap(Math.floor(px / CHUNK), Math.floor(pz / CHUNK));
@@ -490,6 +496,11 @@ export class Engine {
       this.menuCam(dt);
     }
     this.stream();
+    this.animals.update(dt, this.mode === "play" ? this.pos : null, (kind) => {
+      if (this.mode !== "play") return;
+      if (kind === "snort") this.audio.snort();
+      else this.audio.chirp();
+    });
     this.animateBits(dt);
     this.skyPass(dt);
     this.aimHighlight();
@@ -945,6 +956,7 @@ export class Engine {
     this.matCutout.color.setRGB(rb, g, b);
     this.matGlass.color.setRGB(rb, g, Math.min(1, b + 0.05));
     this.matWater.color.setRGB(rb * 0.85, g * 0.92, Math.min(1, b + 0.08));
+    this.animals.tint(rb, g, b);
     if (this.mode === "play") this.skyT = (this.skyT + dt / 240) % 1;
   }
 
@@ -969,7 +981,7 @@ export class Engine {
       this.queue.sort((a, b) => (a[0] - pcx) ** 2 + (a[1] - pcz) ** 2 - ((b[0] - pcx) ** 2 + (b[1] - pcz) ** 2));
       for (const key of [...this.meshes.keys()]) {
         const [cx, cz] = key.split(",").map(Number);
-        if (Math.abs(cx - pcx) > r + 1 || Math.abs(cz - pcz) > r + 1) this.dropMesh(key);
+        if (Math.abs(cx - pcx) > r + 1 || Math.abs(cz - pcz) > r + 1) this.dropMesh(key, true);
       }
     }
     const budget = this.mobile ? 1 : 2;
@@ -1000,10 +1012,15 @@ export class Engine {
     add(built.water, this.matWater);
     this.scene.add(group);
     this.meshes.set(key, group);
+    this.animals.consider(cx, cz);
   }
 
-  private dropMesh(key: string): void {
+  private dropMesh(key: string, unload = false): void {
     const group = this.meshes.get(key);
+    if (unload) {
+      const [cx, cz] = key.split(",").map(Number);
+      this.animals.forget(cx, cz);
+    }
     if (!group) return;
     this.scene.remove(group);
     group.traverse((obj) => {
@@ -1043,10 +1060,25 @@ export class Engine {
     let aimed: string | null = null;
     if (this.mode === "play") {
       const hit = this.aim();
+      let blockDist = Infinity;
       if (hit) {
         const id = this.world.get(hit.x, hit.y, hit.z);
         if (id !== AIR) aimed = BLOCKS[id].name;
+        blockDist = Math.hypot(
+          hit.x + 0.5 - this.camera.position.x,
+          hit.y + 0.5 - this.camera.position.y,
+          hit.z + 0.5 - this.camera.position.z,
+        );
       }
+      const animal = this.animals.look(
+        this.camera.position.x,
+        this.camera.position.y,
+        this.camera.position.z,
+        this.dir.x,
+        this.dir.y,
+        this.dir.z,
+      );
+      if (animal && animal.dist < 6.5 && animal.dist < blockDist + 1.25) aimed = animal.name;
     }
     const hard = this.breakKey
       ? BLOCKS[this.world.get(
@@ -1105,6 +1137,7 @@ export class Engine {
     (this.highlight.material as THREE.Material).dispose();
     this.pmesh.geometry.dispose();
     (this.pmesh.material as THREE.Material).dispose();
+    this.animals.dispose();
     this.renderer.dispose();
     this.audio.dispose();
     this.timer.disconnect();
@@ -1122,6 +1155,7 @@ declare global {
       setKeys: (codes: string[]) => void;
       mine: () => boolean;
       place: () => boolean;
+      animals: () => { name: string; x: number; y: number; z: number }[];
     };
     __cobbleReady?: boolean;
   }

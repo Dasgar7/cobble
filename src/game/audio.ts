@@ -112,6 +112,13 @@ export class GameAudio {
   jump(): void {
     this.blip(340, 0.08, "sine", 0.08);
   }
+  chirp(): void {
+    this.blip(880, 0.09, "sine", 0.05);
+    this.blip(1240, 0.07, "sine", 0.03);
+  }
+  snort(): void {
+    this.envNoise(0.09, 160, 0.16);
+  }
 
   dispose(): void {
     for (const o of this.pad) {
